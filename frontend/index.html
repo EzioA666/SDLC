@@ -117,7 +117,7 @@
             window.location.reload();
         }
 
-        function executeSearch() {
+        async function executeSearch() {
             const input = document.getElementById('skuInput').value;
             const status = document.getElementById('statusMessage');
             const table = document.getElementById('resultsTable');
@@ -132,6 +132,28 @@
             status.innerText = "";
             table.style.display = 'table';
             tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">Querying StockX and GOAT...</td></tr>';
+
+            try {
+                const response = await fetch(`http://127.0.0.1:5000/api/search?sku=${input}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    tbody.innerHTML = '';
+                    data.data.forEach(item => {
+                        tbody.innerHTML += `
+                            <tr>
+                                <td><strong>${item.platform}</strong></td>
+                                <td style="color: #28a745; font-weight: bold;">${item.price}</td>
+                                <td><a href="${item.url}" target="_blank" style="color: #007bff; text-decoration: none;">Buy on ${item.platform}</a></td>
+                            </tr>
+                        `;
+                    });
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="3" class="error">${data.error}</td></tr>`;
+                }
+            } catch (error) {
+                tbody.innerHTML = `<tr><td colspan="3" class="error">Backend connection failed. Ensure app.py is running.</td></tr>`;
+            }
         }
     </script>
 </body>
