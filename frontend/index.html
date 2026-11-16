@@ -1,3 +1,12 @@
+<!-- 
+  ==============================================================================
+  Module: frontend/index.html
+  UI/UX Redesign & Layout Architecture: Disha
+  Backend API Integration & Dynamic Price/Size DOM Rendering: Yunzhe Yu
+  ==============================================================================
+-->
+
+
 <!DOCTYPE html>
 <html lang="en">
 <!-- 
@@ -717,21 +726,40 @@
             const tbody = document.getElementById('resultsBody');
             const card = document.getElementById('resultsCard');
             const status = document.getElementById('statusMessage');
-            const best = Math.min(...rows.map(r => r.price));
-            const worst = Math.max(...rows.map(r => r.price));
 
-            tbody.innerHTML = rows.map(r => `
-                <tr>
-                    <td><span class="platform-cell"><span class="platform-glyph" aria-hidden="true">${r.platform.slice(0, 2).toUpperCase()}</span>${r.platform}</span></td>
-                    <td><span class="price-cell ${r.price === best ? 'price-best' : ''}">$${r.price.toFixed(2)}${r.price === best ? '<span class="best-badge">Best price</span>' : ''}</span></td>
-                    <td><a class="buy-link" href="${r.url}" target="_blank" rel="noopener">View listing →</a></td>
-                </tr>
-            `).join('');
+            const validPrices = rows
+                .filter(r => typeof r.price === 'number' && r.price > 0)
+                .map(r => r.price);
+
+            const best = validPrices.length ? Math.min(...validPrices) : null;
+            const worst = validPrices.length ? Math.max(...validPrices) : null;
+
+            tbody.innerHTML = rows.map(r => {
+                const hasPrice = typeof r.price === 'number' && r.price > 0;
+                const isBest = hasPrice && best !== null && r.price === best && validPrices.length > 1;
+                const sizeTag = r.size ? ` <span style="font-size: var(--text-xs); color: var(--color-text-muted); font-weight: 400;">(Size ${r.size})</span>` : '';
+
+                const priceHtml = hasPrice
+                    ? `<span class="price-cell ${isBest ? 'price-best' : ''}">$${r.price.toFixed(2)}${sizeTag}${isBest ? '<span class="best-badge">Best price</span>' : ''}</span>`
+                    : `<span class="price-cell" style="color: var(--color-text-faint); font-size: var(--text-sm);">Not found</span>`;
+
+                const linkHtml = r.url
+                    ? `<a class="buy-link" href="${r.url}" target="_blank" rel="noopener">View listing →</a>`
+                    : `<span style="color: var(--color-text-faint); font-size: var(--text-sm);">Unavailable</span>`;
+
+                return `
+                    <tr>
+                        <td><span class="platform-cell"><span class="platform-glyph" aria-hidden="true">${r.platform.slice(0, 2).toUpperCase()}</span>${r.platform}</span></td>
+                        <td>${priceHtml}</td>
+                        <td>${linkHtml}</td>
+                    </tr>
+                `;
+            }).join('');
 
             document.getElementById('resultsTitle').innerHTML =
                 'Results for "' + query + '"' + (isDemo ? '<span class="badge-demo">Demo data</span>' : '');
             document.getElementById('resultsMeta').textContent = new Date().toLocaleString();
-            document.getElementById('savingsNote').innerHTML = (worst > best)
+            document.getElementById('savingsNote').innerHTML = (validPrices.length > 1 && worst > best)
                 ? 'Best price saves you <strong>$' + (worst - best).toFixed(2) + '</strong> vs. the highest listing.'
                 : '';
             card.style.display = 'block';
@@ -756,22 +784,23 @@
             status.textContent = 'Querying StockX and GOAT…';
             status.className = '';
 
-            /* Try the real backend first, fall back to demo data if it's not running */
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 3000);
-            fetch('/api/search?sku=' + encodeURIComponent(input), { signal: controller.signal })
+            const timeout = setTimeout(() => controller.abort(), 10000);
+            fetch('http://127.0.0.1:5000/api/search?sku=' + encodeURIComponent(input), { signal: controller.signal })
                 .then(res => res.ok ? res.json() : Promise.reject(res.status))
                 .then(data => {
                     clearTimeout(timeout);
                     if (Array.isArray(data.results) && data.results.length) {
                         renderResults(data.results, input, false);
                     } else {
-                        renderResults(demoResults(input), input, true);
+                        status.textContent = 'No results found for "' + input + '".';
+                        card.style.display = 'none';
                     }
                 })
                 .catch(() => {
                     clearTimeout(timeout);
-                    renderResults(demoResults(input), input, true);
+                    status.textContent = 'Error: Backend connection failed or no results found. Ensure app.py is running on port 5000.';
+                    card.style.display = 'none';
                 });
         }
     </script>
