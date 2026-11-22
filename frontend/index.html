@@ -415,6 +415,8 @@
                         <button class="chip" type="button" onclick="quickSearch('Yeezy Slide Bone')">Yeezy Slide Bone</button>
                         <button class="chip" type="button" onclick="quickSearch('New Balance 550')">New Balance 550</button>
                     </div>
+                    <!-- Saved search history (visible when authenticated) -->
+                    <div class="trending" id="historyPanel" aria-label="Recent searches" style="display:none; margin-top: var(--space-2);"></div>
                 </div>
 
                 <!-- ===== Disha's Results Table Redesign ===== -->
@@ -565,14 +567,14 @@
                         <div class="p-name">Flight Club</div>
                         <p class="p-desc">Long-running marketplace for rare and retro releases.</p>
                     </div>
-                    <span class="status-pill status-soon">Roadmap</span>
+                    <span class="status-pill status-soon">Live</span>
                 </div>
                 <div class="platform-card">
                     <div>
                         <div class="p-name">Stadium Goods</div>
                         <p class="p-desc">Curated marketplace for premium and hard-to-find sneakers.</p>
                     </div>
-                    <span class="status-pill status-soon">Roadmap</span>
+                    <span class="status-pill status-soon">Live</span>
                 </div>
             </div>
         </section>
@@ -692,10 +694,95 @@
             `;
         }
 
+        const API_BASE = 'http://127.0.0.1:5000';
+
         function executeLogout() {
+            const token = storage.getItem('token');
+            if (token) {
+                fetch(`${API_BASE}/api/logout`, {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                }).catch(() => {});
+            }
             storage.removeItem('token');
             storage.removeItem('username');
             window.location.reload();
+        }
+
+        function loadSearchHistory() {
+            const token = storage.getItem('token');
+            const panel = document.getElementById('historyPanel');
+            if (!token || !panel) return;
+
+            fetch(`${API_BASE}/api/history`, {
+                headers: { 'Authorization': 'Bearer ' + token }
+            })
+                .then(res => res.ok ? res.json() : Promise.reject(res.status))
+                .then(data => {
+                    const items = data.history || [];
+                    if (!items.length) {
+                        panel.style.display = 'none';
+                        return;
+                    }
+                    panel.innerHTML = '<span class="trending-label">Recent</span>' + items.map(item => {
+                        const escaped = item.query.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                        const tag = item.lowest_price ? ` · $${Number(item.lowest_price).toFixed(0)}` : '';
+                        return `<button class="chip" type="button" onclick="quickSearch('${escaped}')">${item.query}${tag}</button>`;
+                    }).join('');
+                    panel.style.display = 'flex';
+                })
+                .catch(() => {
+                    panel.style.display = 'none';
+                });
+        }
+
+        if (storage.getItem('token')) {
+            loadSearchHistory();
+        }
+
+        function executeSearch() {
+            const input = document.getElementById('skuInput').value.trim();
+            const status = document.getElementById('statusMessage');
+            const card = document.getElementById('resultsCard');
+
+            if (!input) {
+                status.textContent = 'Error: No results found. Please enter a valid SKU.';
+                status.className = '';
+                card.style.display = 'none';
+                return;
+            }
+
+            status.textContent = 'Querying live marketplaces…';
+            status.className = '';
+
+            const headers = {};
+            const token = storage.getItem('token');
+            if (token) {
+                headers['Authorization'] = 'Bearer ' + token;
+            }
+
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 10000);
+            fetch(`${API_BASE}/api/search?sku=` + encodeURIComponent(input), {
+                headers,
+                signal: controller.signal
+            })
+                .then(res => res.ok ? res.json() : Promise.reject(res.status))
+                .then(data => {
+                    clearTimeout(timeout);
+                    if (Array.isArray(data.results) && data.results.length) {
+                        renderResults(data.results, input, false);
+                        if (token) loadSearchHistory();
+                    } else {
+                        status.textContent = 'No results found for "' + input + '".';
+                        card.style.display = 'none';
+                    }
+                })
+                .catch(() => {
+                    clearTimeout(timeout);
+                    status.textContent = 'Error: No results found or backend unreachable on port 5000.';
+                    card.style.display = 'none';
+                });
         }
 
         /* ===== Search ===== */
