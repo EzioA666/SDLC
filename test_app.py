@@ -118,3 +118,31 @@ def test_authenticated_search_saves_history_and_logout_revokes(client):
     client.post("/api/logout", headers=headers)
     blocked = client.get("/api/history", headers=headers)
     assert blocked.status_code == 401
+
+def test_favorites_and_profile_endpoints(client):
+    client.post("/api/signup", json={"username": "collector", "password": "password123"})
+    token = client.post("/api/login", json={"username": "collector", "password": "password123"}).get_json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Save favorite
+    add_res = client.post("/api/favorites", headers=headers, json={
+        "query": "Jordan 4 Bred",
+        "lowest_price": 245.0,
+        "platform": "GOAT",
+        "url": "https://www.goat.com/sneakers/air-jordan-4-retro-bred-reimagined-fv5029-006"
+    })
+    assert add_res.status_code == 201
+    fav_id = add_res.get_json()["id"]
+
+    # Fetch full profile
+    prof_res = client.get("/api/profile", headers=headers)
+    assert prof_res.status_code == 200
+    profile = prof_res.get_json()["profile"]
+    assert profile["username"] == "collector"
+    assert len(profile["favorites"]) == 1
+    assert profile["favorites"][0]["query"] == "Jordan 4 Bred"
+
+    # Delete favorite
+    del_res = client.delete(f"/api/favorites/{fav_id}", headers=headers)
+    assert del_res.status_code == 200
+    assert len(client.get("/api/favorites", headers=headers).get_json()["favorites"]) == 0

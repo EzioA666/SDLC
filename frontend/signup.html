@@ -18,9 +18,11 @@
 <body>
     <div class="auth-card">
         <h2>Sign Up</h2>
-        <input type="text" id="username" placeholder="Choose a Username">
-        <input type="password" id="password" placeholder="Choose a Password">
-        <button onclick="executeSignup()">Create Account</button>
+        <form onsubmit="executeSignup(event)">
+            <input type="text" id="username" placeholder="Choose a Username" required>
+            <input type="password" id="password" placeholder="Choose a Password" required>
+            <button type="submit">Create Account</button>
+        </form>
         <a href="login.html" class="link">Already have an account? Log in</a>
         <a href="index.html" class="link" style="color: #6c757d;">Return to Home</a>
         <span id="authStatus" class="msg"></span>
@@ -29,36 +31,31 @@
     <script>
         const API_URL = 'http://127.0.0.1:5000/api';
 
-        async function executeSignup() {
-            const user = document.getElementById('username').value;
-            const pass = document.getElementById('password').value;
+        async function executeSignup(event) {
+            if (event) event.preventDefault();
+
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
             const status = document.getElementById('authStatus');
 
-            if (!user || !pass) {
-                status.className = 'msg';
-                status.innerText = "Credentials required.";
-                return;
-            }
-
             try {
-                const response = await fetch(`${API_URL}/signup`, {
+                const res = await fetch(`${API_URL}/signup`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: user, password: pass })
+                    body: JSON.stringify({ username, password })
                 });
-                const data = await response.json();
-                
-                if (response.ok) {
-                    status.className = 'msg success';
-                    status.innerText = "Account created. Redirecting to login...";
-                    setTimeout(() => { window.location.href = 'login.html'; }, 1500);
-                } else {
-                    status.className = 'msg';
-                    status.innerText = data.error;
+                const data = await res.json();
+
+                if (res.ok && data.token) {
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('username', data.username || username);
+                    window.location.href = 'index.html';
+                    return;
                 }
-            } catch (error) {
-                status.className = 'msg';
-                status.innerText = "Backend connection failed.";
+
+                if (status) status.textContent = data.error || 'Signup failed.';
+            } catch (err) {
+                if (status) status.textContent = 'Backend unreachable on port 5000.';
             }
         }
     </script>

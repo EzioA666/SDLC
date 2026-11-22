@@ -35,8 +35,12 @@ def signup():
     if not database.create_user(username, password):
         return jsonify({"error": "Username already exists"}), 409
 
-    return jsonify({"message": "Signup successful"}), 201
-
+    user = database.authenticate_user(username, password)
+    return jsonify({
+        "message": "Signup successful",
+        "username": user["username"],
+        "token": user["token"]
+    }), 201
 
 @app.route('/api/login', methods=['POST'])
 def login():
@@ -106,6 +110,57 @@ async def search_sneaker():
         "results": pricing_data
     }), 200
 
+@app.route('/api/profile', methods=['GET'])
+def profile():
+    token = extract_bearer_token()
+    user = database.get_user_by_token(token)
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    profile_data = database.get_user_profile(user["id"])
+    if not profile_data:
+        return jsonify({"error": "User not found"}), 404
+
+    return jsonify({"status": "success", "profile": profile_data}), 200
+
+
+@app.route('/api/favorites', methods=['GET', 'POST'])
+def favorites():
+    token = extract_bearer_token()
+    user = database.get_user_by_token(token)
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if request.method == 'POST':
+        data = request.get_json(silent=True) or {}
+        query = (data.get('query') or '').strip()
+        if not query:
+            return jsonify({"error": "Query is required"}), 400
+
+        fav_id = database.add_favorite(
+            user["id"],
+            query,
+            data.get("lowest_price"),
+            data.get("platform"),
+            data.get("url")
+        )
+        return jsonify({"status": "saved", "id": fav_id}), 201
+
+    return jsonify({"status": "success", "favorites": database.get_favorites(user["id"])}), 200
+
+
+@app.route('/api/favorites/<int:fav_id>', methods=['DELETE'])
+def delete_favorite(fav_id):
+    token = extract_bearer_token()
+    user = database.get_user_by_token(token)
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    deleted = database.remove_favorite(user["id"], fav_id)
+    if not deleted:
+        return jsonify({"error": "Favorite not found"}), 404
+
+    return jsonify({"status": "deleted"}), 200
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
